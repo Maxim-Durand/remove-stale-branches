@@ -18,14 +18,6 @@ const GRAPHQL_QUERY = `query ($repo: String!, $owner: String!, $after: String) {
             }
           }
           prefix
-          ... on Ref {
-            refUpdateRule {
-              allowsDeletions
-            }
-            rules(first: 1) {
-              totalCount
-            }
-          }
           target {
           ... on Commit {
               oid
@@ -64,14 +56,6 @@ const GRAPHQL_QUERY_WITH_ORG = `query ($repo: String!, $owner: String!, $organiz
             }
           }
           prefix
-          ... on Ref {
-            refUpdateRule {
-              allowsDeletions
-            }
-            rules(first: 1) {
-              totalCount
-            }
-          }
           target {
           ... on Commit {
               oid
@@ -156,10 +140,6 @@ type Ref = {
     ];
   };
   prefix: string;
-  refUpdateRule: unknown | null;
-  rules: {
-    totalCount: number;
-  };
   target: GitOject;
 };
 
@@ -174,6 +154,39 @@ type Repository = {
   refs: RefConnection;
 };
 
+async function fetchProtectedBranchNames(
+  octokit: Octokit,
+  headers: { [key: string]: string },
+  repo: Repo,
+): Promise<Set<string>> {
+  const protectedBranchNames = new Set<string>();
+  const perPage = 100;
+
+  for (let page = 1; ; ++page) {
+    const { data } = await octokit.request(
+      "GET /repos/{owner}/{repo}/branches",
+      {
+        owner: repo.owner,
+        repo: repo.repo,
+        protected: true,
+        per_page: perPage,
+        page,
+        headers,
+      },
+    );
+
+    for (const branch of data) {
+      protectedBranchNames.add(branch.name);
+    }
+
+    if (data.length < perPage) {
+      break;
+    }
+  }
+
+  return protectedBranchNames;
+}
+
 export async function* readBranches(
   octokit: Octokit,
   headers: { [key: string]: string },
@@ -186,6 +199,12 @@ export async function* readBranches(
     hasPreviousPage: false,
     startCursor: null,
   };
+
+  const protectedBranchNames = await fetchProtectedBranchNames(
+    octokit,
+    headers,
+    repo,
+  );
 
   while (pagination.hasNextPage) {
     const params = {
@@ -206,8 +225,7 @@ export async function* readBranches(
 
     for (let i = 0; i < edges.length; ++i) {
       const ref = edges[i];
-      const { name, prefix, refUpdateRule, rules, associatedPullRequests } =
-        ref.node;
+      const { name, prefix, associatedPullRequests } = ref.node;
 
       const { oid, authoredDate, author } = ref.node.target as GitOject &
         Commit;
@@ -227,7 +245,7 @@ export async function* readBranches(
         prefix,
         commitId: oid,
         author: branchAuthor,
-        isProtected: refUpdateRule !== null || rules.totalCount > 0,
+        isProtected: protectedBranchNames.has(name),
         openPrs: associatedPullRequests.nodes.length > 0,
       };
     }
