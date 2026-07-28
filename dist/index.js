@@ -19875,8 +19875,11 @@ const GRAPHQL_QUERY = `query ($repo: String!, $owner: String!, $after: String) {
           }
           prefix
           ... on Ref {
-            refUpdateRule {
-              allowsDeletions
+            branchProtectionRule {
+              id
+            }
+            rules(first: 1) {
+              totalCount
             }
           }
           target {
@@ -19918,8 +19921,11 @@ const GRAPHQL_QUERY_WITH_ORG = `query ($repo: String!, $owner: String!, $organiz
           }
           prefix
           ... on Ref {
-            refUpdateRule {
-              allowsDeletions
+            branchProtectionRule {
+              id
+            }
+            rules(first: 1) {
+              totalCount
             }
           }
           target {
@@ -19963,7 +19969,7 @@ async function* readBranches(octokit, headers, repo, organization) {
 		const { repository: { refs: { edges, pageInfo } } } = await octokit.graphql(organization ? GRAPHQL_QUERY_WITH_ORG : GRAPHQL_QUERY, params);
 		for (let i = 0; i < edges.length; ++i) {
 			const ref = edges[i];
-			const { name, prefix, refUpdateRule, associatedPullRequests } = ref.node;
+			const { name, prefix, branchProtectionRule, rules, associatedPullRequests } = ref.node;
 			const { oid, authoredDate, author } = ref.node.target;
 			let branchAuthor = null;
 			if (author) branchAuthor = {
@@ -19977,7 +19983,7 @@ async function* readBranches(octokit, headers, repo, organization) {
 				prefix,
 				commitId: oid,
 				author: branchAuthor,
-				isProtected: refUpdateRule !== null,
+				isProtected: branchProtectionRule !== null || rules.totalCount > 0,
 				openPrs: associatedPullRequests.nodes.length > 0
 			};
 		}
