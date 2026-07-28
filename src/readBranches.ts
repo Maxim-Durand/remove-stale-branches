@@ -19,8 +19,8 @@ const GRAPHQL_QUERY = `query ($repo: String!, $owner: String!, $after: String) {
           }
           prefix
           ... on Ref {
-            branchProtectionRule {
-              id
+            refUpdateRule {
+              allowsDeletions
             }
             rules(first: 1) {
               totalCount
@@ -65,8 +65,8 @@ const GRAPHQL_QUERY_WITH_ORG = `query ($repo: String!, $owner: String!, $organiz
           }
           prefix
           ... on Ref {
-            branchProtectionRule {
-              id
+            refUpdateRule {
+              allowsDeletions
             }
             rules(first: 1) {
               totalCount
@@ -156,7 +156,7 @@ type Ref = {
     ];
   };
   prefix: string;
-  branchProtectionRule: unknown | null;
+  refUpdateRule: unknown | null;
   rules: {
     totalCount: number;
   };
@@ -206,13 +206,8 @@ export async function* readBranches(
 
     for (let i = 0; i < edges.length; ++i) {
       const ref = edges[i];
-      const {
-        name,
-        prefix,
-        branchProtectionRule,
-        rules,
-        associatedPullRequests,
-      } = ref.node;
+      const { name, prefix, refUpdateRule, rules, associatedPullRequests } =
+        ref.node;
 
       const { oid, authoredDate, author } = ref.node.target as GitOject &
         Commit;
@@ -232,7 +227,7 @@ export async function* readBranches(
         prefix,
         commitId: oid,
         author: branchAuthor,
-        isProtected: branchProtectionRule !== null || rules.totalCount > 0,
+        isProtected: refUpdateRule !== null || rules.totalCount > 0,
         openPrs: associatedPullRequests.nodes.length > 0,
       };
     }
